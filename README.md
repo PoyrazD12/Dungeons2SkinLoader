@@ -1,6 +1,8 @@
 # Dungeons 2 Skin Loader
 
-**by Poyraz Captain** **Only Steam for now**
+**by Poyraz Captain** 
+
+**Only Steam for now**
 
 Put your own Minecraft skins on the heroes of **Minecraft Dungeons II**. Cosmetic only: nothing about gameplay changes.
 
