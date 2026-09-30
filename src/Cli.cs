@@ -7,13 +7,23 @@ namespace Dungeons2SkinLoader
 {
     static class Cli
     {
-        // Dungeons2SkinLoader.exe --cli <outdir | game folder with --install> [--flat] [--no-head-layer] [--nomesh] [--install] "Hero|deluxe|png|mode|c.r c.r" ...
+        // Dungeons2SkinLoader.exe --cli <outdir | game folder with --install> [--flat] [--head-coverage full|front-guard|helmet] [--nomesh] [--install] "Hero|deluxe|png|mode|c.r c.r" ...
         public static int Run(string[] args)
         {
             var gd = App.LoadData();
-            string outdir = args[1]; bool flat = args.Contains("--flat"), nomesh = args.Contains("--nomesh"), headOuterLayer = !args.Contains("--no-head-layer");
+            string outdir = args[1]; bool flat = args.Contains("--flat"), nomesh = args.Contains("--nomesh");
+            var headCoverage = HeadCoverage.Full;
+            int coverageIndex = Array.IndexOf(args, "--head-coverage");
+            if (coverageIndex >= 0 && coverageIndex + 1 < args.Length)
+            {
+                var value = args[coverageIndex + 1].ToLowerInvariant();
+                if (value == "front-guard") headCoverage = HeadCoverage.FrontGuard;
+                else if (value == "helmet") headCoverage = HeadCoverage.FullHelmet;
+                else if (value != "full") throw new ArgumentException("--head-coverage must be full, front-guard, or helmet");
+            }
+            else if (args.Contains("--no-head-layer")) headCoverage = HeadCoverage.FullHelmet; // legacy alias
             var slots = new List<SkinSlot>();
-            foreach (var a in args.Skip(2).Where(x => !x.StartsWith("--")))
+            foreach (var a in args.Skip(2).Where((x, i) => !x.StartsWith("--") && !(i > 0 && args[i + 1] == "--head-coverage")))
             {
                 var p = a.Split('|');
                 var s = new SkinSlot { HeroKey = p[0] + "|" + p[1], ImagePath = p[2] };
@@ -24,7 +34,7 @@ namespace Dungeons2SkinLoader
                     s.Eyes = Converter.DetectEyes(Converter.To64(Img.FromFile(s.ImagePath)));
                 slots.Add(s);
             }
-            var files = ModBuilder.Build(gd, slots, !flat, Console.WriteLine, !nomesh, headOuterLayer);
+            var files = ModBuilder.Build(gd, slots, !flat, Console.WriteLine, !nomesh, headCoverage);
             if (args.Contains("--export"))      // <outdir> is a .zip for a friend (mod files + INSTALL/UNINSTALL scripts)
             {
                 if (File.Exists(outdir)) File.Delete(outdir);

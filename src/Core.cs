@@ -14,6 +14,11 @@ namespace Dungeons2SkinLoader
 {
     public enum FaceMode { Drawn, Game, Blink }
 
+    // A static mod cannot inspect the currently equipped head item.  Instead it
+    // can avoid only the outer-skin texels that a chosen type of headgear covers.
+    // The profiles deliberately leave the base face and all body overlays alone.
+    public enum HeadCoverage { Full, FrontGuard, FullHelmet }
+
     public class Pkg
     {
         public byte[] ChunkId; public string Path; public byte[] Data; public int PixelOffset; public List<byte[]> Imports;
@@ -275,15 +280,20 @@ namespace Dungeons2SkinLoader
         static byte[] Darkest(byte[] a, byte[] b) { return a[0] + a[1] + a[2] <= b[0] + b[1] + b[2] ? a : b; }
 
         /// <summary>Minecraft skin -> the game's hero texture layout (see build_skin_mod.convert_skin).</summary>
-        public static Img Convert(GameData gd, Img user, FaceMode mode, ICollection<int> eyePixels, GameFace gameFace = null, int? lidColor = null, int? lidColor2 = null, bool headOuterLayer = true)
+        public static Img Convert(GameData gd, Img user, FaceMode mode, ICollection<int> eyePixels, GameFace gameFace = null, int? lidColor = null, int? lidColor2 = null, HeadCoverage headCoverage = HeadCoverage.Full)
         {
             var s = To64(user);
-            // Helmets and masks are not exposed to a static PAK mod, so it cannot
-            // know when the game's head gear should hide the Minecraft hat layer.
-            // In helmet-safe mode, retain the lower three rows of the outer front
-            // face (where many Minecraft beards live) but clear the rest of the
-            // outer head. Body/sleeve/pants overlays and the base face stay intact.
-            if (!headOuterLayer)
+            // Minecraft's outer-head UVs are: top/bottom y0..7, then right,
+            // front, left and back at x32..63/y8..15.  A front guard hides only
+            // the upper front pixels so side hair/art and beard pixels remain.
+            // Full helmet is intentionally broader, but preserves the lower
+            // three front rows where many Minecraft beards live.
+            if (headCoverage == HeadCoverage.FrontGuard)
+            {
+                var clear = new byte[4];
+                for (int y = 8; y <= 12; y++) for (int x = 40; x < 48; x++) s.Set(x, y, clear);
+            }
+            else if (headCoverage == HeadCoverage.FullHelmet)
             {
                 var lowerFace = new byte[8 * 3 * 4];
                 for (int y = 0; y < 3; y++) for (int x = 0; x < 8; x++)
@@ -655,7 +665,7 @@ namespace Dungeons2SkinLoader
         }
 
         /// <summary>Builds the three mod files (pak, utoc, ucas) for the given skins.</summary>
-        public static Dictionary<string, byte[]> Build(GameData gd, IList<SkinSlot> slots, bool layers, Action<string> log, bool includeMesh = true, bool headOuterLayer = true)
+        public static Dictionary<string, byte[]> Build(GameData gd, IList<SkinSlot> slots, bool layers, Action<string> log, bool includeMesh = true, HeadCoverage headCoverage = HeadCoverage.Full)
         {
             var chunks = new List<Tuple<byte[], byte[]>>(); var paths = new List<Tuple<string, int>>(); var imports = new List<List<byte[]>>();
             Action<Pkg, byte[]> add = (p, data) =>
@@ -668,7 +678,7 @@ namespace Dungeons2SkinLoader
             {
                 var h = gd.FindHero(s.HeroKey);
                 if (h == null) throw new InvalidDataException("Unknown hero " + s.HeroKey);
-                var tex = Converter.Convert(gd, Img.FromFile(s.ImagePath), s.Mode, s.Eyes, s.Face, s.LidColor, s.LidColor2, headOuterLayer);
+                var tex = Converter.Convert(gd, Img.FromFile(s.ImagePath), s.Mode, s.Eyes, s.Face, s.LidColor, s.LidColor2, headCoverage);
                 add(h.Skin, Patch(h.Skin.Data, h.Skin.PixelOffset, Encoders.Bgra(tex)));
                 add(h.Mres, Patch(h.Mres.Data, h.Mres.PixelOffset, MresData(gd)));
                 var icon = Renderer.RenderIcon(geo, tex, 256, gd.IconCam);
