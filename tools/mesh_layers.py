@@ -13,6 +13,13 @@ import numpy as np
 UNIT = 6.25      # mesh units per skin pixel (head is 8px = 50 units)
 INFLATE = 0.25   # outer layer offset in pixels (Minecraft uses 0.25)
 
+# The game already has a separate head/hat shell.  Its source geometry is
+# inflated by 0.25 px, whereas Minecraft's hat layer is 0.50 px from the
+# head.  Keep body overlays at INFLATE and move only this existing shell by
+# the remaining 0.25 px.
+HAT_UV = (32, 0, 64, 16)
+HAT_EXTRA_INFLATE = 0.25
+
 # base UV rect (u0, v0, u1, v1) -> overlay UV offset (du, dv)
 PARTS = [((16, 16, 40, 32), (0, 16)),    # body      -> jacket
          ((40, 16, 54, 32), (0, 16)),    # right arm -> right sleeve (slim arm is 14px wide)
@@ -51,6 +58,41 @@ EYE_PIVOT_Z = 27.0                     # px, where the eye bones' blink squash c
 SEC_MAX_INFLUENCES = 5190              # render section MaxBoneInfluences (1 in the stock mesh)
 def u32(b, o): return struct.unpack_from("<I", b, o)[0]
 
+def inflate_existing_shell(pos, uv, idx, uv_rect, extra_inflate):
+    """Move one existing UV-isolated shell outwards without touching its base mesh."""
+    u0, v0, u1, v1 = uv_rect
+    centres = uv[idx].mean(1)
+    tris = idx[(centres[:, 0] > u0) & (centres[:, 0] < u1) &
+               (centres[:, 1] > v0) & (centres[:, 1] < v1)]
+    if not len(tris):
+        raise ValueError("could not find the hat shell in SK_Player_Master")
+    verts = sorted(set(tris.flatten().tolist()))
+    centre = pos[verts].mean(0)
+    normals = {}
+    for tri in tris:
+        a, b, c = pos[tri]
+        normal = np.cross(b - a, c - a)
+        if np.linalg.norm(normal) < 1e-9:
+            continue
+        normal /= np.linalg.norm(normal)
+        if np.dot(normal, (a + b + c) / 3 - centre) < 0:
+            normal = -normal
+        for vertex in tri:
+            normals.setdefault(vertex, normal)
+    groups = {}
+    for vertex in verts:
+        groups.setdefault(tuple(np.round(pos[vertex], 3)), []).append(vertex)
+    for vertices in groups.values():
+        unique_normals = []
+        for vertex in vertices:
+            normal = normals.get(vertex)
+            if normal is not None and not any(np.dot(normal, other) > 0.99 for other in unique_normals):
+                unique_normals.append(normal)
+        if unique_normals:
+            offset = sum(unique_normals) * extra_inflate * UNIT
+            for vertex in vertices:
+                pos[vertex] += offset
+
 def add_layers(pkg, mode="full", layers=True, blink=True):
     if mode == "orig":
         return pkg, (0, 0)
@@ -70,6 +112,8 @@ def add_layers(pkg, mode="full", layers=True, blink=True):
     skin = np.frombuffer(b, np.uint8, NV * 8, p_sk).reshape(-1, 8).copy()
     p_lk = O["look_n2"] + 4
     look = np.frombuffer(b, "<u4", NV, p_lk).copy()
+
+    inflate_existing_shell(pos, uv, idx, HAT_UV, HAT_EXTRA_INFLATE)
 
     new_pos, new_tan, new_uv, new_skin, new_look, new_tris = [], [], [], [], [], []
     nv = NV
