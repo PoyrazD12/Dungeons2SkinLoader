@@ -601,9 +601,9 @@ namespace Dungeons2SkinLoader
             bottom.Paint += (s, e) => { using (var p = new Pen(Theme.Line)) e.Graphics.DrawLine(p, 0, 0, bottom.Width, 0); };
             layersBox = new CheckBox { Text = "3D outer layers (jacket, sleeves, pants)", AutoSize = true, Checked = true, ForeColor = Theme.Text, Location = new Point(26, 15), Font = Theme.F(10f), Cursor = Cursors.Hand };
             layersBox.CheckedChanged += (s, e) => { if (loading) return; layers = layersBox.Checked; thumbCache.Clear(); SaveConfig(); RefreshCards(); banner.Refresh3D(); };
-            headLayerBox = new CheckBox { Text = "Show outer head layer (hair, hats, glasses)", AutoSize = true, Checked = true, ForeColor = Theme.Text, Location = new Point(26, 39), Font = Theme.F(10f), Cursor = Cursors.Hand };
+            headLayerBox = new CheckBox { Text = "Show full outer head layer (hair, hats, glasses)", AutoSize = true, Checked = true, ForeColor = Theme.Text, Location = new Point(26, 39), Font = Theme.F(10f), Cursor = Cursors.Hand };
             headLayerBox.CheckedChanged += (s, e) => { if (loading) return; headOuterLayer = headLayerBox.Checked; texCache.Clear(); thumbCache.Clear(); SaveConfig(); RefreshCards(); banner.Refresh3D(); };
-            var hint = new Label { Text = "Turn the head layer off for helmets and masks; body outer layers stay enabled.", AutoSize = true, ForeColor = Theme.Dim, Location = new Point(45, 65), Font = Theme.F(8.5f) };
+            var hint = new Label { Text = "For helmets and masks, turn it off: hair and side layers hide; lower-face beard pixels stay.", AutoSize = true, ForeColor = Theme.Dim, Location = new Point(45, 65), Font = Theme.F(8.5f) };
             var install = new TactileButton("Install to game", BtnKind.Primary, "⬇") { Width = 250, Height = 54, Anchor = AnchorStyles.Right | AnchorStyles.Top };
             var remove = new TactileButton("Uninstall mod", BtnKind.Secondary) { Width = 180, Height = 54, Anchor = AnchorStyles.Right | AnchorStyles.Top };
             var export = new TactileButton("Export for a friend", BtnKind.Secondary, "⇪") { Width = 246, Height = 54, Anchor = AnchorStyles.Right | AnchorStyles.Top };

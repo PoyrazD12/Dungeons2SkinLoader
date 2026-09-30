@@ -280,12 +280,18 @@ namespace Dungeons2SkinLoader
             var s = To64(user);
             // Helmets and masks are not exposed to a static PAK mod, so it cannot
             // know when the game's head gear should hide the Minecraft hat layer.
-            // This gear-safe option clears only the 32x16 second-head-layer area;
-            // body/sleeve/pants overlays and the base face remain untouched.
+            // In helmet-safe mode, retain the lower three rows of the outer front
+            // face (where many Minecraft beards live) but clear the rest of the
+            // outer head. Body/sleeve/pants overlays and the base face stay intact.
             if (!headOuterLayer)
             {
+                var lowerFace = new byte[8 * 3 * 4];
+                for (int y = 0; y < 3; y++) for (int x = 0; x < 8; x++)
+                    Buffer.BlockCopy(s.P, s.Idx(40 + x, 13 + y), lowerFace, (y * 8 + x) * 4, 4);
                 var clear = new byte[4];
                 for (int y = 0; y < 16; y++) for (int x = 32; x < 64; x++) s.Set(x, y, clear);
+                for (int y = 0; y < 3; y++) for (int x = 0; x < 8; x++)
+                    Buffer.BlockCopy(lowerFace, (y * 8 + x) * 4, s.P, s.Idx(40 + x, 13 + y), 4);
             }
             if (!IsSlim(s)) foreach (var a in ARMS) ArmToSlim(s, a[0], a[1]);
             foreach (var o in OVERLAYS)
