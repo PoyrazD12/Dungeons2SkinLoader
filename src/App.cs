@@ -9,7 +9,7 @@ namespace Dungeons2SkinLoader
     {
         public const string Name = "Dungeons 2 Skin Loader";
         public const string Author = "Poyraz Captain";
-        public const string Version = "1.0.0";
+        public const string Version = "1.1.0";
 
         public static GameData LoadData()
         {

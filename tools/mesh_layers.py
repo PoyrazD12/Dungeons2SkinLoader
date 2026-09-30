@@ -13,12 +13,14 @@ import numpy as np
 UNIT = 6.25      # mesh units per skin pixel (head is 8px = 50 units)
 INFLATE = 0.25   # outer layer offset in pixels (Minecraft uses 0.25)
 
-# The game already has a separate head/hat shell.  Its source geometry is
-# inflated by 0.25 px, whereas Minecraft's hat layer is 0.50 px from the
-# head.  Keep body overlays at INFLATE and move only this existing shell by
-# the remaining 0.25 px.
+# The game already has a separate head/hat shell, but it sits only ~0.065 px
+# outside the head, whereas Minecraft's hat layer is 0.50 px from the head.
+# Keep body overlays at INFLATE and move only this existing shell out to
+# HAT_INFLATE (by the measured remainder).  (hat fix by plutonmoyai)
 HAT_UV = (32, 0, 64, 16)
-HAT_EXTRA_INFLATE = 0.25
+HEAD_UV = (0, 0, 32, 16)
+HAT_INFLATE = 0.5
+BLINK_OUTER_GAP = 0.036                # px in front of the hat face for the outer blink grid
 
 # base UV rect (u0, v0, u1, v1) -> overlay UV offset (du, dv)
 PARTS = [((16, 16, 40, 32), (0, 16)),    # body      -> jacket
@@ -58,12 +60,21 @@ EYE_PIVOT_Z = 27.0                     # px, where the eye bones' blink squash c
 SEC_MAX_INFLUENCES = 5190              # render section MaxBoneInfluences (1 in the stock mesh)
 def u32(b, o): return struct.unpack_from("<I", b, o)[0]
 
-def inflate_existing_shell(pos, uv, idx, uv_rect, extra_inflate):
-    """Move one existing UV-isolated shell outwards without touching its base mesh."""
+def shell_tris(uv, idx, uv_rect):
     u0, v0, u1, v1 = uv_rect
     centres = uv[idx].mean(1)
-    tris = idx[(centres[:, 0] > u0) & (centres[:, 0] < u1) &
+    return idx[(centres[:, 0] > u0) & (centres[:, 0] < u1) &
                (centres[:, 1] > v0) & (centres[:, 1] < v1)]
+
+def shell_gap(pos, uv, idx, outer_rect, inner_rect):
+    """How far (px) one shell sits outside another, averaged over the six box sides."""
+    o = pos[sorted(set(shell_tris(uv, idx, outer_rect).flatten().tolist()))]
+    i = pos[sorted(set(shell_tris(uv, idx, inner_rect).flatten().tolist()))]
+    return float(np.mean(np.concatenate([o.max(0) - i.max(0), i.min(0) - o.min(0)]))) / UNIT
+
+def inflate_existing_shell(pos, uv, idx, uv_rect, extra_inflate):
+    """Move one existing UV-isolated shell outwards; returns the moved vertices."""
+    tris = shell_tris(uv, idx, uv_rect)
     if not len(tris):
         raise ValueError("could not find the hat shell in SK_Player_Master")
     verts = sorted(set(tris.flatten().tolist()))
@@ -77,6 +88,10 @@ def inflate_existing_shell(pos, uv, idx, uv_rect, extra_inflate):
         normal /= np.linalg.norm(normal)
         if np.dot(normal, (a + b + c) / 3 - centre) < 0:
             normal = -normal
+        # the hat is a box whose faces are not perfectly flat: snap to the
+        # face axis so every side moves by exactly extra_inflate
+        axis = int(np.argmax(np.abs(normal)))
+        normal = np.eye(3)[axis] * np.sign(normal[axis])
         for vertex in tri:
             normals.setdefault(vertex, normal)
     groups = {}
@@ -92,6 +107,7 @@ def inflate_existing_shell(pos, uv, idx, uv_rect, extra_inflate):
             offset = sum(unique_normals) * extra_inflate * UNIT
             for vertex in vertices:
                 pos[vertex] += offset
+    return verts
 
 def add_layers(pkg, mode="full", layers=True, blink=True):
     if mode == "orig":
@@ -113,7 +129,12 @@ def add_layers(pkg, mode="full", layers=True, blink=True):
     p_lk = O["look_n2"] + 4
     look = np.frombuffer(b, "<u4", NV, p_lk).copy()
 
-    inflate_existing_shell(pos, uv, idx, HAT_UV, HAT_EXTRA_INFLATE)
+    if layers:
+        # the base positions are otherwise never rewritten: patch the moved hat
+        # vertices in place (before any insertion, so p_pos is still valid)
+        extra = HAT_INFLATE - shell_gap(pos, uv, idx, HAT_UV, HEAD_UV)
+        for v in inflate_existing_shell(pos, uv, idx, HAT_UV, extra):
+            struct.pack_into("<3f", b, p_pos + 12 * v, *pos[v])
 
     new_pos, new_tan, new_uv, new_skin, new_look, new_tris = [], [], [], [], [], []
     nv = NV
@@ -165,8 +186,9 @@ def add_layers(pkg, mode="full", layers=True, blink=True):
         P = pos[ref[0]]; nref = np.cross(P[1] - P[0], P[2] - P[0]); src = int(ref[0][0])
         bonemap = list(struct.unpack_from("<13H", b, 5160))
         head = bonemap.index(HEAD_BONE)
-        grids = [(BLINK_EYES, 4.013 * UNIT),      # in front of the face, behind the hat layer
-                 (BLINK_OUTER, 4.10 * UNIT)]      # just in front of the hat layer (~4.064 px)
+        hat_front = pos[sorted(set(shell_tris(uv, idx, HAT_UV).flatten().tolist()))][:, 1].max()
+        grids = [(BLINK_EYES, 4.013 * UNIT),                         # in front of the face, behind the hat layer
+                 (BLINK_OUTER, hat_front + BLINK_OUTER_GAP * UNIT)]  # just in front of the hat layer
         for (col, row), (tu, tv), y in [(k, v, gy) for grid, gy in grids for k, v in grid.items()]:
             x0, x1 = (-4 + col) * UNIT, (-3 + col) * UNIT
             zb, zt = 31 - row, 32 - row
