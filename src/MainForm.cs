@@ -543,14 +543,14 @@ namespace Dungeons2SkinLoader
     public class MainForm : Form
     {
         GameData gd; string gameDir;
-        List<SkinSlot> slots = new List<SkinSlot>(); bool layers = true; int current = -1;
+        List<SkinSlot> slots = new List<SkinSlot>(); bool layers = true, headOuterLayer = true; int current = -1;
         Dictionary<SkinSlot, Img> texCache = new Dictionary<SkinSlot, Img>();
         Dictionary<SkinSlot, Bitmap> thumbCache = new Dictionary<SkinSlot, Bitmap>();
 
         Panel listPanel, editor, header; List<SlotCard> cards = new List<SlotCard>();
         SwapBanner banner; HeroPicker heroPicker; OptionCard[] modeCards; FacePicker picker; Panel eyePanel, gamePanel; Label eyeInfo;
         ToggleSwitch[] gfOn; Swatch[] gfCol; int partsTop; Segmented[] eyeSeg; Label[] eyeLbl; ToggleSwitch lidOn, lidSplit; Swatch lidCol, lidCol2; Panel lidRow; Label lidLbl, lidLbl2;
-        Label fileLabel, emptyHint; StatusLine statusPill; PictureBox flatTex; CheckBox layersBox; Toast toast; bool loading;
+        Label fileLabel, emptyHint; StatusLine statusPill; PictureBox flatTex; CheckBox layersBox, headLayerBox; Toast toast; bool loading;
 
         public MainForm()
         {
@@ -597,20 +597,22 @@ namespace Dungeons2SkinLoader
             };
 
             // bottom bar
-            var bottom = new DoubleBufferedPanel { Dock = DockStyle.Bottom, Height = 86, BackColor = Theme.Panel };
+            var bottom = new DoubleBufferedPanel { Dock = DockStyle.Bottom, Height = 104, BackColor = Theme.Panel };
             bottom.Paint += (s, e) => { using (var p = new Pen(Theme.Line)) e.Graphics.DrawLine(p, 0, 0, bottom.Width, 0); };
-            layersBox = new CheckBox { Text = "3D outer layers (jacket, sleeves, pants)", AutoSize = true, Checked = true, ForeColor = Theme.Text, Location = new Point(26, 22), Font = Theme.F(10f), Cursor = Cursors.Hand };
+            layersBox = new CheckBox { Text = "3D outer layers (jacket, sleeves, pants)", AutoSize = true, Checked = true, ForeColor = Theme.Text, Location = new Point(26, 15), Font = Theme.F(10f), Cursor = Cursors.Hand };
             layersBox.CheckedChanged += (s, e) => { if (loading) return; layers = layersBox.Checked; thumbCache.Clear(); SaveConfig(); RefreshCards(); banner.Refresh3D(); };
-            var hint = new Label { Text = "Applies to every hero; skins without outer-layer pixels look the same.", AutoSize = true, ForeColor = Theme.Dim, Location = new Point(45, 48), Font = Theme.F(8.5f) };
+            headLayerBox = new CheckBox { Text = "Show outer head layer (hair, hats, glasses)", AutoSize = true, Checked = true, ForeColor = Theme.Text, Location = new Point(26, 39), Font = Theme.F(10f), Cursor = Cursors.Hand };
+            headLayerBox.CheckedChanged += (s, e) => { if (loading) return; headOuterLayer = headLayerBox.Checked; texCache.Clear(); thumbCache.Clear(); SaveConfig(); RefreshCards(); banner.Refresh3D(); };
+            var hint = new Label { Text = "Turn the head layer off for helmets and masks; body outer layers stay enabled.", AutoSize = true, ForeColor = Theme.Dim, Location = new Point(45, 65), Font = Theme.F(8.5f) };
             var install = new TactileButton("Install to game", BtnKind.Primary, "⬇") { Width = 250, Height = 54, Anchor = AnchorStyles.Right | AnchorStyles.Top };
             var remove = new TactileButton("Uninstall mod", BtnKind.Secondary) { Width = 180, Height = 54, Anchor = AnchorStyles.Right | AnchorStyles.Top };
             var export = new TactileButton("Export for a friend", BtnKind.Secondary, "⇪") { Width = 246, Height = 54, Anchor = AnchorStyles.Right | AnchorStyles.Top };
             foreach (var b in new[] { install, remove, export }) b.BackColor = Theme.Panel;
             install.Click += (s, e) => Install(); remove.Click += (s, e) => RemoveMod(); export.Click += (s, e) => Export();
-            bottom.Controls.AddRange(new Control[] { layersBox, hint, install, remove, export });
+            bottom.Controls.AddRange(new Control[] { layersBox, headLayerBox, hint, install, remove, export });
             bottom.Resize += (s, e) =>
             {
-                install.Location = new Point(bottom.Width - 274, 16); remove.Location = new Point(install.Left - 192, 16); export.Location = new Point(remove.Left - 258, 16);
+                install.Location = new Point(bottom.Width - 274, 25); remove.Location = new Point(install.Left - 192, 25); export.Location = new Point(remove.Left - 258, 25);
             };
 
             // left: skin list
@@ -782,7 +784,7 @@ namespace Dungeons2SkinLoader
             Img t;
             if (!texCache.TryGetValue(s, out t))
             {
-                try { t = Converter.Convert(gd, Img.FromFile(s.ImagePath), s.Mode, s.Eyes, s.Face, s.LidColor, s.LidColor2); } catch { t = null; }
+                try { t = Converter.Convert(gd, Img.FromFile(s.ImagePath), s.Mode, s.Eyes, s.Face, s.LidColor, s.LidColor2, headOuterLayer); } catch { t = null; }
                 texCache[s] = t;
             }
             return t;
@@ -995,7 +997,7 @@ namespace Dungeons2SkinLoader
 
         void SaveConfig()
         {
-            var lines = new List<string> { "layers=" + (layers ? 1 : 0) };
+            var lines = new List<string> { "layers=" + (layers ? 1 : 0), "headlayer=" + (headOuterLayer ? 1 : 0) };
             foreach (var s in slots)
                 lines.Add(string.Join("|", s.HeroKey, s.ImagePath, s.Mode.ToString(), string.Join(" ", s.Eyes.Select(e => (e / 8) + "." + (e % 8))), s.Face != null ? s.Face.Serialize() : "", s.LidColor.HasValue ? "lid=" + s.LidColor.Value.ToString("x6") + (s.LidColor2.HasValue ? "," + s.LidColor2.Value.ToString("x6") : "") : ""));
             File.WriteAllLines(ConfigPath, lines);
@@ -1009,6 +1011,7 @@ namespace Dungeons2SkinLoader
                 foreach (var l in File.ReadAllLines(ConfigPath))
                 {
                     if (l.StartsWith("layers=")) { layers = l.EndsWith("1"); continue; }
+                    if (l.StartsWith("headlayer=")) { headOuterLayer = l.EndsWith("1"); continue; }
                     var p = l.Split('|'); if (p.Length < 5 || !File.Exists(p[2])) continue;
                     var s = new SkinSlot { HeroKey = p[0] + "|" + p[1], ImagePath = p[2] };
                     FaceMode m; if (Enum.TryParse(p[3], out m)) s.Mode = m;
@@ -1022,7 +1025,7 @@ namespace Dungeons2SkinLoader
                     if (p[4].Trim() != "") s.Eyes = p[4].Split(' ').Select(e => int.Parse(e.Split('.')[0]) * 8 + int.Parse(e.Split('.')[1])).ToList();
                     if (gd.FindHero(s.HeroKey) != null) slots.Add(s);
                 }
-            layersBox.Checked = layers;
+            layersBox.Checked = layers; headLayerBox.Checked = headOuterLayer;
             var gf = Path.Combine(App.DataDir, "gamefolder.txt");
             if (File.Exists(gf)) { var g = File.ReadAllText(gf).Trim(); if (g != "" && Game.IsGame(g)) gameDir = g; }
             loading = false;
@@ -1065,7 +1068,7 @@ namespace Dungeons2SkinLoader
         Dictionary<string, byte[]> BuildMod()
         {
             Cursor = Cursors.WaitCursor;
-            try { return ModBuilder.Build(gd, slots, layers, null); }
+            try { return ModBuilder.Build(gd, slots, layers, null, true, headOuterLayer); }
             finally { Cursor = Cursors.Default; }
         }
 

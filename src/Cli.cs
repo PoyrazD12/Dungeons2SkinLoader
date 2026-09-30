@@ -7,11 +7,11 @@ namespace Dungeons2SkinLoader
 {
     static class Cli
     {
-        // Dungeons2SkinLoader.exe --cli <outdir | game folder with --install> [--flat] [--nomesh] [--install] "Hero|deluxe|png|mode|c.r c.r" ...
+        // Dungeons2SkinLoader.exe --cli <outdir | game folder with --install> [--flat] [--no-head-layer] [--nomesh] [--install] "Hero|deluxe|png|mode|c.r c.r" ...
         public static int Run(string[] args)
         {
             var gd = App.LoadData();
-            string outdir = args[1]; bool flat = args.Contains("--flat"), nomesh = args.Contains("--nomesh");
+            string outdir = args[1]; bool flat = args.Contains("--flat"), nomesh = args.Contains("--nomesh"), headOuterLayer = !args.Contains("--no-head-layer");
             var slots = new List<SkinSlot>();
             foreach (var a in args.Skip(2).Where(x => !x.StartsWith("--")))
             {
@@ -24,7 +24,7 @@ namespace Dungeons2SkinLoader
                     s.Eyes = Converter.DetectEyes(Converter.To64(Img.FromFile(s.ImagePath)));
                 slots.Add(s);
             }
-            var files = ModBuilder.Build(gd, slots, !flat, Console.WriteLine, !nomesh);
+            var files = ModBuilder.Build(gd, slots, !flat, Console.WriteLine, !nomesh, headOuterLayer);
             if (args.Contains("--export"))      // <outdir> is a .zip for a friend (mod files + INSTALL/UNINSTALL scripts)
             {
                 if (File.Exists(outdir)) File.Delete(outdir);

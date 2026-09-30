@@ -275,9 +275,18 @@ namespace Dungeons2SkinLoader
         static byte[] Darkest(byte[] a, byte[] b) { return a[0] + a[1] + a[2] <= b[0] + b[1] + b[2] ? a : b; }
 
         /// <summary>Minecraft skin -> the game's hero texture layout (see build_skin_mod.convert_skin).</summary>
-        public static Img Convert(GameData gd, Img user, FaceMode mode, ICollection<int> eyePixels, GameFace gameFace = null, int? lidColor = null, int? lidColor2 = null)
+        public static Img Convert(GameData gd, Img user, FaceMode mode, ICollection<int> eyePixels, GameFace gameFace = null, int? lidColor = null, int? lidColor2 = null, bool headOuterLayer = true)
         {
             var s = To64(user);
+            // Helmets and masks are not exposed to a static PAK mod, so it cannot
+            // know when the game's head gear should hide the Minecraft hat layer.
+            // This gear-safe option clears only the 32x16 second-head-layer area;
+            // body/sleeve/pants overlays and the base face remain untouched.
+            if (!headOuterLayer)
+            {
+                var clear = new byte[4];
+                for (int y = 0; y < 16; y++) for (int x = 32; x < 64; x++) s.Set(x, y, clear);
+            }
             if (!IsSlim(s)) foreach (var a in ARMS) ArmToSlim(s, a[0], a[1]);
             foreach (var o in OVERLAYS)
             {
@@ -640,7 +649,7 @@ namespace Dungeons2SkinLoader
         }
 
         /// <summary>Builds the three mod files (pak, utoc, ucas) for the given skins.</summary>
-        public static Dictionary<string, byte[]> Build(GameData gd, IList<SkinSlot> slots, bool layers, Action<string> log, bool includeMesh = true)
+        public static Dictionary<string, byte[]> Build(GameData gd, IList<SkinSlot> slots, bool layers, Action<string> log, bool includeMesh = true, bool headOuterLayer = true)
         {
             var chunks = new List<Tuple<byte[], byte[]>>(); var paths = new List<Tuple<string, int>>(); var imports = new List<List<byte[]>>();
             Action<Pkg, byte[]> add = (p, data) =>
@@ -653,7 +662,7 @@ namespace Dungeons2SkinLoader
             {
                 var h = gd.FindHero(s.HeroKey);
                 if (h == null) throw new InvalidDataException("Unknown hero " + s.HeroKey);
-                var tex = Converter.Convert(gd, Img.FromFile(s.ImagePath), s.Mode, s.Eyes, s.Face, s.LidColor, s.LidColor2);
+                var tex = Converter.Convert(gd, Img.FromFile(s.ImagePath), s.Mode, s.Eyes, s.Face, s.LidColor, s.LidColor2, headOuterLayer);
                 add(h.Skin, Patch(h.Skin.Data, h.Skin.PixelOffset, Encoders.Bgra(tex)));
                 add(h.Mres, Patch(h.Mres.Data, h.Mres.PixelOffset, MresData(gd)));
                 var icon = Renderer.RenderIcon(geo, tex, 256, gd.IconCam);
