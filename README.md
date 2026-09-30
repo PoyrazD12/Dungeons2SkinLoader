@@ -3,6 +3,7 @@
 **by Poyraz Captain** 
 
 **Only Steam for now**
+For install guide: https://youtu.be/GDVbDG61Mgo?si=D5F3er49hy6og5Md
 
 Put your own Minecraft skins on the heroes of **Minecraft Dungeons II**. Cosmetic only: nothing about gameplay changes.
 
